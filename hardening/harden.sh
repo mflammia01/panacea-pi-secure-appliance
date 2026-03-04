@@ -18,7 +18,7 @@ sudo apt install -y ufw fail2ban unattended-upgrades apt-listchanges usbguard ca
 
 # LUKS full-disk encryption
 echo "Setting up LUKS encryption..."
-echo "??  LUKS encryption of the root partition on a running system requires"
+echo "⚠️  LUKS encryption of the root partition on a running system requires"
 echo "   an offline migration. For production, encrypt during image preparation."
 echo "   For now, this script ensures cryptsetup is installed and ready."
 echo "   See: https://wiki.archlinux.org/title/Dm-crypt/Encrypting_an_entire_system"
@@ -73,6 +73,7 @@ echo "Setting up firewall..."
 sudo ufw --force reset
 sudo ufw default deny incoming
 sudo ufw default allow outgoing
+sudo ufw allow 22/tcp
 sudo ufw allow in on lo
 sudo ufw allow out on lo
 sudo ufw --force enable
@@ -84,13 +85,14 @@ echo "auth required pam_google_authenticator.so" | sudo tee -a /etc/pam.d/sshd >
 
 # Enroll TOTP for the admin user
 echo
-echo "+--------------------------------------------------------------+"
-echo "¦  SETTING UP 2FA — A QR CODE WILL APPEAR BELOW              ¦"
-echo "¦  Screenshot it or copy the secret key to share with staff   ¦"
-echo "+--------------------------------------------------------------+"
+echo "╔══════════════════════════════════════════════════════════════╗"
+echo "║  SETTING UP 2FA — A QR CODE WILL APPEAR BELOW              ║"
+echo "║  Screenshot it or copy the secret key to share with staff   ║"
+echo "╚══════════════════════════════════════════════════════════════╝"
 echo
 google-authenticator -t -d -f -r 3 -R 30 -w 3
 
 echo
-echo "? Hardening + 2FA complete. Reboot recommended."
+echo "✅ Hardening + 2FA complete. Reboot recommended."
 echo "   sudo reboot"
+EOF
