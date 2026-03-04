@@ -1,0 +1,26 @@
+# Never commit keys or secrets
+*.pem
+*.key
+*.crt
+*.pfx
+*.p12
+
+# Secret files
+.env
+.env.*
+*secrets*
+*token*
+*password*
+
+# Provisioner outputs
+manufacturing.db
+*.sqlite
+workdir/
+deploy/
+*.img
+*.zip
+*.gz
+
+# Logs
+*.log
+logs/
