@@ -95,4 +95,3 @@ google-authenticator -t -d -f -r 3 -R 30 -w 3
 echo
 echo "✅ Hardening + 2FA complete. Reboot recommended."
 echo "   sudo reboot"
-EOF
