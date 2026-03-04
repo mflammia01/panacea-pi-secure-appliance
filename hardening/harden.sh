@@ -1,8 +1,16 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# This must match the username you set in Raspberry Pi Imager (Step 3)
-ADMIN_USER="pi-admin"
+# Admin username — pass via env var or enter when prompted
+ADMIN_USER="${ADMIN_USER:-}"
+if [ -z "$ADMIN_USER" ]; then
+  read -rp "Enter admin username (must match Raspberry Pi Imager): " ADMIN_USER
+fi
+if [ -z "$ADMIN_USER" ]; then
+  echo "Error: admin username cannot be empty" >&2
+  exit 1
+fi
+echo "Using admin user: $ADMIN_USER"
 
 echo "Installing security packages..."
 sudo apt update
