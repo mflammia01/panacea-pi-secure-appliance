@@ -12,14 +12,8 @@
 *token*
 *password*
 
-# Provisioner outputs
-manufacturing.db
-*.sqlite
-workdir/
-deploy/
-*.img
-*.zip
-*.gz
+# Device inventory backups
+inventory.csv
 
 # Logs
 *.log
