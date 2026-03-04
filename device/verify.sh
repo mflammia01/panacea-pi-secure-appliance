@@ -13,3 +13,5 @@ echo
 echo "fail2ban:"; sudo systemctl is-enabled fail2ban && sudo fail2ban-client status sshd || true
 echo
 echo "unattended-upgrades:"; systemctl is-enabled unattended-upgrades || true
+echo
+echo "2FA:"; grep -c 'pam_google_authenticator' /etc/pam.d/sshd && echo "enabled" || echo "NOT configured"

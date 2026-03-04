@@ -4,7 +4,7 @@ set -euo pipefail
 DB="${1:-/var/lib/rpi-sb-provisioner/manufacturing.db}"
 
 if [[ ! -f "$DB" ]]; then
-  echo "DB not found: $DB" >&2
+  echo "DB not found: $DB" 1>&2
   exit 1
 fi
 
