@@ -1,4 +1,3 @@
-cat > device/seal.sh << 'EOF'
 #!/usr/bin/env bash
 set -euo pipefail
 
@@ -36,4 +35,3 @@ echo "Sealed. All inbound blocked except SSH (port 22)."
 if systemctl is-active --quiet twingate-connector 2>/dev/null; then
   echo "✅ Twingate connector is running"
 fi
-EOF
