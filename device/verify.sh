@@ -47,7 +47,7 @@ echo
 echo "── Twingate Config ──"
 if [ -L /etc/twingate ]; then
   echo "✅ /etc/twingate → $(readlink /etc/twingate)"
-  if [ -f /secure/twingate/connector.conf ]; then
+  if sudo test -f /secure/twingate/connector.conf; then
     echo "✅ connector.conf present in vault"
   else
     echo "❌ connector.conf MISSING from vault — re-run setup"
