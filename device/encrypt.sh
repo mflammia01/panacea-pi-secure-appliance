@@ -81,13 +81,13 @@ sudo chown "$(logname):$(logname)" "$HEADER_BACKUP"
 
 echo
 echo "╔══════════════════════════════════════════════════════════════╗"
-echo "║  ✅ LUKS ENCRYPTION COMPLETE                               ║"
-echo "║                                                            ║"
+echo "║  ✅ LUKS ENCRYPTION COMPLETE                                ║"
+echo "║                                                              ║"
 echo "║  Header backup: $HEADER_BACKUP"
-echo "║  Copy this file OFF the device to a secure location.       ║"
-echo "║                                                            ║"
-echo "║  On next boot, you will be prompted for the passphrase.    ║"
-echo "║  Save the passphrase in your password manager NOW.         ║"
+echo "║  Copy this file OFF the device to a secure location.         ║"
+echo "║                                                              ║"
+echo "║  On next boot, you will be prompted for the passphrase.      ║"
+echo "║  Save the passphrase in your password manager NOW.           ║"
 echo "╚══════════════════════════════════════════════════════════════╝"
 echo
 read -rp "Have you saved the passphrase and header backup? (yes/no): " SAVED
