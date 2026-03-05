@@ -1,4 +1,3 @@
-cat > hardening/harden.sh << 'EOF'
 #!/usr/bin/env bash
 set -euo pipefail
 
