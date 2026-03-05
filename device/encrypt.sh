@@ -9,7 +9,7 @@ set -euo pipefail
 VAULT_FILE="/opt/vault.luks"
 VAULT_MAPPER="panacea_vault"
 MOUNT_POINT="/secure"
-VAULT_SIZE_MB=512
+VAULT_SIZE_MB=5120
 
 echo "╔══════════════════════════════════════════════════════════════╗"
 echo "║  🔒 ENCRYPTED DATA VAULT SETUP                             ║"
