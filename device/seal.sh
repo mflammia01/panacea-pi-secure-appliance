@@ -12,4 +12,3 @@ sudo ufw --force enable
 sudo systemctl restart ssh || sudo systemctl restart sshd
 
 echo "Sealed. All inbound blocked except SSH (port 22)."
-EOF
