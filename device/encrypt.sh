@@ -117,13 +117,10 @@ Before=ssh.service sshd.service twingate-connector.service
 [Service]
 Type=oneshot
 RemainAfterExit=yes
-ExecStart=/bin/bash -c '\
-  CPU_SERIAL=$(grep Serial /proc/cpuinfo | awk "{print \$3}") && \
-  KEY=$(echo -n "$CPU_SERIAL:panacea-vault-$(hostname)" | sha256sum | awk "{print \$1}") && \
-  echo "$KEY" | /sbin/cryptsetup open --type luks2 --key-file=- /opt/vault.luks panacea_vault && \
-  /bin/mount /dev/mapper/panacea_vault /secure \
-'
-ExecStop=/bin/bash -c '/bin/umount /secure; /sbin/cryptsetup close panacea_vault'
+ExecStart=/sbin/cryptsetup open --type luks2 --key-file /root/.vault/vault.key /opt/vault.luks panacea_vault
+ExecStartPost=/bin/mount /dev/mapper/panacea_vault /secure
+ExecStop=/bin/umount /secure
+ExecStopPost=/sbin/cryptsetup close panacea_vault
 
 [Install]
 WantedBy=multi-user.target
