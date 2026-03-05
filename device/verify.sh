@@ -47,10 +47,20 @@ echo
 echo "── Twingate Config ──"
 if [ -L /etc/twingate ]; then
   echo "✅ /etc/twingate → $(readlink /etc/twingate)"
+  if [ -f /secure/twingate/connector.conf ]; then
+    echo "✅ connector.conf present in vault"
+  else
+    echo "❌ connector.conf MISSING from vault — re-run setup"
+  fi
 elif [ -d /etc/twingate ]; then
   echo "⚠️  /etc/twingate exists but is NOT symlinked to vault"
 else
   echo "ℹ️  Twingate not installed yet"
+fi
+if systemctl is-active --quiet twingate-connector 2>/dev/null; then
+  echo "✅ twingate-connector service is running"
+else
+  echo "⚠️  twingate-connector service is NOT running"
 fi
 echo
 
@@ -69,4 +79,3 @@ echo
 echo "════════════════════════════════════════════"
 echo "  VERIFICATION COMPLETE"
 echo "════════════════════════════════════════════"
-EOF
