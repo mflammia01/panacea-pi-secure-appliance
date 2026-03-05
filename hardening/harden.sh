@@ -1,4 +1,3 @@
-mkdir -p hardening
 cat > hardening/harden.sh << 'EOF'
 #!/usr/bin/env bash
 set -euo pipefail
@@ -35,29 +34,21 @@ echo "✅ SSH public key found for $ADMIN_USER"
 
 echo "Installing security packages..."
 sudo apt update
-sudo apt install -y ufw fail2ban unattended-upgrades apt-listchanges usbguard ca-certificates curl cryptsetup libpam-google-authenticator
+sudo apt install -y ufw fail2ban unattended-upgrades apt-listchanges usbguard ca-certificates curl cryptsetup
 
-# LUKS full-disk encryption
-echo "Setting up LUKS encryption..."
-echo "⚠️  LUKS encryption of the root partition on a running system requires"
-echo "   an offline migration. For production, encrypt during image preparation."
-echo "   For now, this script ensures cryptsetup is installed and ready."
-echo "   See: https://wiki.archlinux.org/title/Dm-crypt/Encrypting_an_entire_system"
-echo
-
-# SSH hardening
+# SSH hardening — key-only, no passwords
 echo "Hardening SSH..."
 sudo install -d /etc/ssh/sshd_config.d
 sudo tee /etc/ssh/sshd_config.d/panacea-hardening.conf >/dev/null <<CONF
 PasswordAuthentication no
-KbdInteractiveAuthentication yes
+KbdInteractiveAuthentication no
 PermitRootLogin no
 PubkeyAuthentication yes
 AllowUsers ${ADMIN_USER}
 MaxAuthTries 3
 LoginGraceTime 20
 X11Forwarding no
-AuthenticationMethods publickey,keyboard-interactive
+AuthenticationMethods publickey
 CONF
 
 # Enable fail2ban ssh jail
@@ -99,40 +90,14 @@ sudo ufw allow in on lo
 sudo ufw allow out on lo
 sudo ufw --force enable
 
-# Configure PAM for Google Authenticator
-echo "Configuring SSH 2FA (TOTP)..."
-sudo sed -i 's/^@include common-auth$/#@include common-auth/' /etc/pam.d/sshd
-echo "auth required pam_google_authenticator.so" | sudo tee -a /etc/pam.d/sshd >/dev/null
-
-# Enroll TOTP for the admin user
 echo
 echo "╔══════════════════════════════════════════════════════════════╗"
-echo "║  SETTING UP 2FA — A QR CODE WILL APPEAR BELOW              ║"
-echo "║  Screenshot it or copy the secret key to share with staff   ║"
+echo "║  ✅ HARDENING COMPLETE                                     ║"
+echo "║                                                            ║"
+echo "║  SSH is now key-only (password login disabled).            ║"
+echo "║  Next: Run device/encrypt.sh for LUKS root encryption.    ║"
 echo "╚══════════════════════════════════════════════════════════════╝"
 echo
-google-authenticator -t -d -f -r 3 -R 30 -w 3
-
-# ── SAFE REBOOT GATE ─────────────────────────────────────────────
-echo
-echo "╔══════════════════════════════════════════════════════════════╗"
-echo "║  ✅ HARDENING + 2FA COMPLETE                                ║"
-echo "║                                                            ║"
-echo "║  Before rebooting, confirm you have:                       ║"
-echo "║  1. SSH key copied to this device (ssh-copy-id)            ║"
-echo "║  2. 2FA secret / QR code saved in password manager         ║"
-echo "║  3. Emergency scratch codes saved                          ║"
-echo "║                                                            ║"
-echo "║  After reboot, SSH will require: key + TOTP code           ║"
-echo "║  If you lose both, you WILL be locked out.                 ║"
-echo "╚══════════════════════════════════════════════════════════════╝"
-echo
-read -rp "Have you saved the 2FA secret and scratch codes? (yes/no): " CONFIRM
-if [ "$CONFIRM" != "yes" ]; then
-  echo "❌ Reboot cancelled. Save your 2FA credentials, then run: sudo reboot"
-  exit 0
-fi
 echo "Rebooting in 5 seconds... (Ctrl+C to cancel)"
 sleep 5
 sudo reboot
-EOF
