@@ -22,13 +22,18 @@ else
   STATUS="CRITICAL"
 fi
 
+# ── Detect SSH service name (Raspberry Pi OS uses 'ssh', others use 'sshd') ──
+SSH_SVC=$(systemctl list-unit-files ssh.service sshd.service 2>/dev/null | awk '/enabled|generated/ {print $1; exit}')
+SSH_SVC="${SSH_SVC%.service}"
+[ -z "$SSH_SVC" ] && SSH_SVC="ssh"
+
 # ── Critical Services ──
-for SVC in twingate-connector sshd fail2ban; do
+for SVC in twingate-connector "$SSH_SVC" fail2ban; do
   if systemctl is-active --quiet "$SVC" 2>/dev/null; then
     log "$SVC=OK"
   else
     log "$SVC=DOWN"
-    echo "[$TIMESTAMP] Attempting restart: $SVC" >> "$LOGFILE" 2>/dev/null
+    mountpoint -q /secure 2>/dev/null && echo "[$TIMESTAMP] Attempting restart: $SVC" >> "$LOGFILE" 2>/dev/null
     sudo systemctl restart "$SVC" 2>/dev/null
     sleep 3
     if systemctl is-active --quiet "$SVC" 2>/dev/null; then
@@ -40,6 +45,25 @@ for SVC in twingate-connector sshd fail2ban; do
     fi
   fi
 done
+
+# ── Twingate Client (optional — Step 7) ──
+if systemctl list-unit-files twingate.service 2>/dev/null | grep -q twingate.service; then
+  if systemctl is-active --quiet twingate 2>/dev/null; then
+    log "twingate-client=OK"
+  else
+    log "twingate-client=DOWN"
+    mountpoint -q /secure 2>/dev/null && echo "[$TIMESTAMP] Attempting restart: twingate" >> "$LOGFILE" 2>/dev/null
+    sudo systemctl restart twingate 2>/dev/null
+    sleep 3
+    if systemctl is-active --quiet twingate 2>/dev/null; then
+      log "twingate-client=RECOVERED"
+      [ "$STATUS" = "HEALTHY" ] && STATUS="DEGRADED"
+    else
+      log "twingate-client=RESTART_FAILED"
+      STATUS="CRITICAL"
+    fi
+  fi
+fi
 
 # ── Disk Usage ──
 DISK_PCT=$(df / | awk 'NR==2 {gsub(/%/,""); print $5}')
@@ -71,8 +95,11 @@ UPTIME=$(uptime -p)
 log "up=$UPTIME"
 
 # ── Write Log ──
-mkdir -p "$LOGDIR" 2>/dev/null
-echo "[$TIMESTAMP] $STATUS $DETAILS" >> "$LOGFILE"
+if mountpoint -q /secure 2>/dev/null; then
+  echo "[$TIMESTAMP] $STATUS $DETAILS" >> "$LOGFILE"
+else
+  logger -t panacea-healthcheck "$STATUS $DETAILS"
+fi
 
 # ── Exit Code ──
 case "$STATUS" in
