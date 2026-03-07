@@ -22,8 +22,9 @@ echo "║  The vault auto-unlocks on boot using the Pi's CPU serial. ║"
 echo "║  No passphrase needed — headless reboot is fully supported. ║"
 echo "║  The key is derived at boot and NEVER stored on disk.      ║"
 echo "║                                                            ║"
-echo "║  SSH host keys, authorized_keys, and logs will be moved    ║"
-echo "║  into the vault and symlinked back.                        ║"
+echo "║  SSH host keys and logs will be moved into the vault.      ║"
+echo "║  The user's authorized_keys file stays in place so SSH    ║"
+echo "║  remains available after reboot.                          ║"
 echo "╚══════════════════════════════════════════════════════════════╝"
 echo
 
@@ -71,7 +72,7 @@ sudo mkdir -p "$MOUNT_POINT"
 sudo mount "/dev/mapper/$VAULT_MAPPER" "$MOUNT_POINT"
 
 # Create vault directory structure
-sudo mkdir -p "$MOUNT_POINT"/{ssh,twingate,auth_keys,logs,secrets}
+sudo mkdir -p "$MOUNT_POINT"/{ssh,twingate,logs,secrets}
 sudo chmod 700 "$MOUNT_POINT"/secrets
 echo "✅ Vault mounted at $MOUNT_POINT"
 
@@ -86,15 +87,6 @@ if ls /etc/ssh/ssh_host_* 1>/dev/null 2>&1; then
   echo "✅ SSH host keys moved and symlinked"
 fi
 
-# ── Move authorized_keys into vault ───────────────────────────
-ADMIN_USER=$(logname 2>/dev/null || echo "$SUDO_USER")
-AUTH_KEYS="/home/$ADMIN_USER/.ssh/authorized_keys"
-if [ -f "$AUTH_KEYS" ] && [ ! -L "$AUTH_KEYS" ]; then
-  sudo cp -a "$AUTH_KEYS" "$MOUNT_POINT/auth_keys/authorized_keys"
-  sudo rm "$AUTH_KEYS"
-  sudo ln -s "$MOUNT_POINT/auth_keys/authorized_keys" "$AUTH_KEYS"
-  echo "✅ authorized_keys moved and symlinked"
-fi
 
 # ── Create log directory ──────────────────────────────────────
 sudo mkdir -p /var/log/panacea
@@ -141,12 +133,14 @@ echo "║            ⚠️  Key is NEVER stored on disk                  ║"
 echo "║  Service:  panacea-vault.service (auto-starts on boot)     ║"
 echo "║                                                            ║"
 echo "║  ✅ SSH host keys → /secure/ssh/                           ║"
-echo "║  ✅ authorized_keys → /secure/auth_keys/                   ║"
+echo "║  ℹ️  authorized_keys remains on the root filesystem        ║"
+echo "║     to preserve reliable SSH access after reboot           ║"
 echo "║  ✅ Logs → /secure/logs/                                   ║"
 echo "║  ⏳ Twingate config → will be moved after install          ║"
 echo "║                                                            ║"
-echo "║  🔑 IMPORTANT: Record this Pi's CPU serial in your         ║"
-echo "║     inventory (ops/inventory.csv) for disaster recovery.   ║"
+echo "║  🔑 IMPORTANT: Record this Pi's CPU serial now:            ║"
+echo "║     grep Serial /proc/cpuinfo | awk '{print \$3}'          ║"
+echo "║     Then store it in ops/inventory.csv                     ║"
 echo "║                                                            ║"
 echo "║  The device will reboot unattended — no passphrase needed. ║"
 echo "╚══════════════════════════════════════════════════════════════╝"
