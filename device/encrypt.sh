@@ -22,9 +22,8 @@ echo "║  The vault auto-unlocks on boot using the Pi's CPU serial. ║"
 echo "║  No passphrase needed — headless reboot is fully supported. ║"
 echo "║  The key is derived at boot and NEVER stored on disk.      ║"
 echo "║                                                            ║"
-echo "║  SSH host keys and logs will be moved into the vault.      ║"
-echo "║  The user's authorized_keys file stays in place so SSH    ║"
-echo "║  remains available after reboot.                          ║"
+echo "║  Logs will be moved into the vault.                         ║"
+echo "║  SSH keys are left untouched — SSH is not affected.       ║"
 echo "╚══════════════════════════════════════════════════════════════╝"
 echo
 
@@ -72,21 +71,9 @@ sudo mkdir -p "$MOUNT_POINT"
 sudo mount "/dev/mapper/$VAULT_MAPPER" "$MOUNT_POINT"
 
 # Create vault directory structure
-sudo mkdir -p "$MOUNT_POINT"/{ssh,twingate,logs,secrets}
+sudo mkdir -p "$MOUNT_POINT"/{twingate,logs,secrets}
 sudo chmod 700 "$MOUNT_POINT"/secrets
 echo "✅ Vault mounted at $MOUNT_POINT"
-
-# ── Move SSH host keys into vault ─────────────────────────────
-echo "Moving SSH host keys into vault..."
-if ls /etc/ssh/ssh_host_* 1>/dev/null 2>&1; then
-  sudo cp -a /etc/ssh/ssh_host_* "$MOUNT_POINT/ssh/"
-  for f in /etc/ssh/ssh_host_*; do
-    sudo rm "$f"
-    sudo ln -s "$MOUNT_POINT/ssh/$(basename $f)" "$f"
-  done
-  echo "✅ SSH host keys moved and symlinked"
-fi
-
 
 # ── Create log directory ──────────────────────────────────────
 sudo mkdir -p /var/log/panacea
@@ -104,7 +91,7 @@ sudo tee /etc/systemd/system/panacea-vault.service >/dev/null <<'SERVICE'
 Description=Panacea Encrypted Data Vault
 DefaultDependencies=no
 After=local-fs.target
-Before=ssh.service sshd.service twingate-connector.service twingate.service
+Before=twingate-connector.service twingate.service
 
 [Service]
 Type=oneshot
@@ -132,9 +119,7 @@ echo "║  Key:      Derived at boot (CPU serial + hostname salt)    ║"
 echo "║            ⚠️  Key is NEVER stored on disk                  ║"
 echo "║  Service:  panacea-vault.service (auto-starts on boot)     ║"
 echo "║                                                            ║"
-echo "║  ✅ SSH host keys → /secure/ssh/                           ║"
-echo "║  ℹ️  authorized_keys remains on the root filesystem        ║"
-echo "║     to preserve reliable SSH access after reboot           ║"
+echo "║  ℹ️  SSH keys are untouched — SSH is not affected            ║"
 echo "║  ✅ Logs → /secure/logs/                                   ║"
 echo "║  ⏳ Twingate config → will be moved after install          ║"
 echo "║                                                            ║"
