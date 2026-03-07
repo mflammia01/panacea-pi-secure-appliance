@@ -1,8 +1,10 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+DEVICE_NAME=$(hostname)
+
 echo "════════════════════════════════════════════"
-echo "  PANACEA DEVICE VERIFICATION"
+echo "  PANACEA DEVICE VERIFICATION — $DEVICE_NAME"
 echo "════════════════════════════════════════════"
 echo
 
@@ -64,6 +66,19 @@ else
 fi
 echo
 
+# ── Twingate Client (optional — Step 7) ──
+echo "── Twingate Client (optional) ──"
+if systemctl list-unit-files twingate.service 2>/dev/null | grep -q '^twingate\.service'; then
+  if systemctl is-active --quiet twingate 2>/dev/null; then
+    echo "✅ twingate client service is running"
+  else
+    echo "⚠️  twingate client service is NOT running"
+  fi
+else
+  echo "ℹ️  Twingate client not installed (optional — Step 7)"
+fi
+echo
+
 # ── Standard checks ──────────────────────────
 echo "── Disk/crypto state ──"
 lsblk -o NAME,TYPE,SIZE,FSTYPE,MOUNTPOINTS
@@ -76,6 +91,22 @@ echo "── fail2ban ──"; sudo systemctl is-enabled fail2ban 2>/dev/null &&
 echo
 echo "── unattended-upgrades ──"; systemctl is-enabled unattended-upgrades 2>/dev/null || true
 echo
+echo "── USBGuard ──"
+if systemctl is-active --quiet usbguard 2>/dev/null; then
+  echo "✅ USBGuard is running"
+elif systemctl is-enabled --quiet usbguard 2>/dev/null; then
+  echo "⚠️  USBGuard enabled but not active"
+else
+  echo "ℹ️  USBGuard not installed (optional — see Step 10)"
+fi
+echo
+echo "── Serial Console ──"
+if [ -f device/serial-console.sh ] || [ -f /usr/local/bin/serial-console.sh ]; then
+  echo "✅ serial-console.sh present"
+else
+  echo "ℹ️  serial-console.sh not found (optional — see Step 11)"
+fi
+echo
 echo "════════════════════════════════════════════"
-echo "  VERIFICATION COMPLETE"
+echo "  VERIFICATION COMPLETE — $DEVICE_NAME"
 echo "════════════════════════════════════════════"
