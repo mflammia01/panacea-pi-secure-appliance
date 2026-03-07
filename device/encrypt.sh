@@ -83,8 +83,44 @@ if [ ! -L /var/log/panacea ]; then
   echo "✅ /var/log/panacea → vault"
 fi
 
+# ── Create vault mount helper script ──────────────────────────
+# Separate script avoids systemd ExecStart escaping pitfalls
+echo "Creating vault mount helper script..."
+sudo tee /usr/local/sbin/panacea-vault-mount.sh >/dev/null <<'HELPER'
+#!/usr/bin/env bash
+set -euo pipefail
+
+MAPPER="panacea_vault"
+MOUNT="/secure"
+
+mkdir -p "$MOUNT"
+
+# ── Open LUKS container (skip if already open) ──
+if [ -e "/dev/mapper/$MAPPER" ]; then
+  echo "Vault mapper already open — skipping cryptsetup"
+else
+  SERIAL=$(grep Serial /proc/cpuinfo | awk '{print $3}')
+  HOST=$(hostname)
+  KEY=$(echo -n "${SERIAL}:panacea-vault-${HOST}" | sha256sum | awk '{print $1}')
+  echo -n "$KEY" | /sbin/cryptsetup open --type luks2 --key-file=- /opt/vault.luks "$MAPPER"
+  echo "Vault mapper opened"
+fi
+
+# ── Mount (skip if already mounted) ──
+if mountpoint -q "$MOUNT"; then
+  echo "$MOUNT already mounted — skipping mount"
+else
+  /bin/mount "/dev/mapper/$MAPPER" "$MOUNT"
+  echo "Mounted $MOUNT"
+fi
+
+# ── Verify ──
+mountpoint -q "$MOUNT" || { echo "FATAL: $MOUNT failed to mount"; exit 1; }
+echo "✅ Vault is ready at $MOUNT"
+HELPER
+sudo chmod 755 /usr/local/sbin/panacea-vault-mount.sh
+
 # ── Create systemd service for auto-mount ─────────────────────
-# Key is derived at boot from CPU serial — never touches disk
 echo "Creating systemd auto-mount service..."
 sudo tee /etc/systemd/system/panacea-vault.service >/dev/null <<'SERVICE'
 [Unit]
@@ -97,8 +133,7 @@ ConditionPathExists=/opt/vault.luks
 [Service]
 Type=oneshot
 RemainAfterExit=yes
-ExecStartPre=/bin/mkdir -p /secure
-ExecStart=/bin/bash -c '  MAPPER="panacea_vault";   if [ -e /dev/mapper/$MAPPER ]; then     echo "Vault mapper already open — skipping cryptsetup";   else     S=$(grep Serial /proc/cpuinfo | awk "{print \$3}");     H=$(hostname);     echo -n "${S}:panacea-vault-${H}" | sha256sum | awk "{print \$1}" |       /sbin/cryptsetup open --type luks2 --key-file=- /opt/vault.luks $MAPPER;   fi;   if mountpoint -q /secure; then     echo "/secure already mounted — skipping mount";   else     /bin/mount /dev/mapper/$MAPPER /secure;   fi;   mountpoint -q /secure || { echo "FATAL: /secure failed to mount"; exit 1; }'
+ExecStart=/usr/local/sbin/panacea-vault-mount.sh
 ExecStop=/bin/umount /secure
 ExecStopPost=/sbin/cryptsetup close panacea_vault
 
