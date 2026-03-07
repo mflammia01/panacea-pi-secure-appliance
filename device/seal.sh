@@ -3,12 +3,42 @@ set -euo pipefail
 
 DEVICE_NAME=$(hostname)
 
+# ── Check vault is mounted ─────────────────────────────────────
+if ! mountpoint -q /secure; then
+  echo "❌ /secure not mounted — attempting to start vault service..."
+  sudo systemctl start panacea-vault.service
+  sleep 2
+  if ! mountpoint -q /secure; then
+    echo ""
+    echo "══════════════════════════════════════════════════════════"
+    echo "  FATAL: /secure still not mounted after service start"
+    echo "══════════════════════════════════════════════════════════"
+    echo ""
+    echo "── Service status ──"
+    sudo systemctl status panacea-vault.service --no-pager 2>&1 || true
+    echo ""
+    echo "── Recent journal logs ──"
+    sudo journalctl -u panacea-vault.service -b --no-pager 2>&1 | tail -n 30
+    echo ""
+    echo "Troubleshooting:"
+    echo "  1. Check hostname hasn't changed: hostname"
+    echo "  2. Check CPU serial: grep Serial /proc/cpuinfo"
+    echo "  3. Check vault file exists: ls -la /opt/vault.luks"
+    echo "  4. Try manual unlock: sudo systemctl start panacea-vault.service"
+    exit 1
+  fi
+  echo "✅ Vault service started — /secure is now mounted"
+fi
+
 # ── Migrate Twingate config into vault (if not already done) ──
 if [ -d /etc/twingate ] && [ ! -L /etc/twingate ]; then
   echo "Migrating Twingate config into encrypted vault..."
-  sudo systemctl stop twingate-connector || true
-  sudo systemctl stop twingate || true
-  mountpoint -q /secure || { echo "❌ /secure not mounted"; exit 1; }
+  if systemctl list-unit-files twingate-connector.service 2>/dev/null | grep -q twingate-connector; then
+    sudo systemctl stop twingate-connector || true
+  fi
+  if systemctl list-unit-files twingate.service 2>/dev/null | grep -q twingate; then
+    sudo systemctl stop twingate || true
+  fi
   sudo mkdir -p /secure/twingate
   sudo cp -a /etc/twingate/. /secure/twingate/
   if [ -f /secure/twingate/connector.conf ]; then
