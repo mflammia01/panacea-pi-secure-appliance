@@ -4,6 +4,7 @@ set -euo pipefail
 # Encrypted Data Vault for Raspberry Pi 5
 # Creates a LUKS-encrypted container at /opt/vault.luks, mounted at /secure
 # Auto-unlocks on boot using a hardware-derived key (CPU serial + salt)
+# The key is NEVER stored on disk — it is derived at every boot
 # Run AFTER harden.sh, BEFORE Twingate install
 
 VAULT_FILE="/opt/vault.luks"
@@ -19,6 +20,7 @@ echo "║  at $VAULT_FILE, mounted at $MOUNT_POINT.                 ║"
 echo "║                                                            ║"
 echo "║  The vault auto-unlocks on boot using the Pi's CPU serial. ║"
 echo "║  No passphrase needed — headless reboot is fully supported. ║"
+echo "║  The key is derived at boot and NEVER stored on disk.      ║"
 echo "║                                                            ║"
 echo "║  SSH host keys, authorized_keys, and logs will be moved    ║"
 echo "║  into the vault and symlinked back.                        ║"
@@ -36,32 +38,29 @@ fi
 sudo apt update
 sudo apt install -y cryptsetup
 
-# ── Derive hardware-bound key ─────────────────────────────────
+# ── Derive hardware-bound key (used only during this script, never stored) ──
 CPU_SERIAL=$(grep Serial /proc/cpuinfo | awk '{print $3}')
 if [ -z "$CPU_SERIAL" ] || [ "$CPU_SERIAL" = "0000000000000000" ]; then
   echo "❌ Could not read CPU serial. Is this a Raspberry Pi?"
   exit 1
 fi
 SALT="panacea-vault-$(hostname)"
-KEY_DIR="/root/.vault"
-sudo mkdir -p "$KEY_DIR"
-sudo chmod 700 "$KEY_DIR"
-echo -n "${CPU_SERIAL}:${SALT}" | sha256sum | awk '{print $1}' | sudo tee "$KEY_DIR/vault.key" >/dev/null
-sudo chmod 400 "$KEY_DIR/vault.key"
-echo "✅ Hardware-derived key generated (CPU serial + hostname salt)"
+echo "✅ CPU serial read successfully"
 
 # ── Create LUKS container ─────────────────────────────────────
 echo "Creating ${VAULT_SIZE_MB}MB container file..."
 sudo dd if=/dev/zero of="$VAULT_FILE" bs=1M count=$VAULT_SIZE_MB status=progress
 sudo chmod 600 "$VAULT_FILE"
 
-echo "Formatting with LUKS2 AES-256..."
-sudo cryptsetup luksFormat --type luks2 --cipher aes-xts-plain64 \
+echo "Formatting with LUKS2 AES-256 (key derived from CPU serial, not stored)..."
+echo -n "${CPU_SERIAL}:${SALT}" | sha256sum | awk '{print $1}' | \
+  sudo cryptsetup luksFormat --type luks2 --cipher aes-xts-plain64 \
   --key-size 512 --hash sha256 --batch-mode \
-  "$VAULT_FILE" "$KEY_DIR/vault.key"
+  "$VAULT_FILE" /dev/stdin
 
 echo "Opening vault..."
-sudo cryptsetup open --type luks2 --key-file "$KEY_DIR/vault.key" \
+echo -n "${CPU_SERIAL}:${SALT}" | sha256sum | awk '{print $1}' | \
+  sudo cryptsetup open --type luks2 --key-file=- \
   "$VAULT_FILE" "$VAULT_MAPPER"
 
 echo "Creating ext4 filesystem..."
@@ -106,18 +105,19 @@ if [ ! -L /var/log/panacea ]; then
 fi
 
 # ── Create systemd service for auto-mount ─────────────────────
+# Key is derived at boot from CPU serial — never touches disk
 echo "Creating systemd auto-mount service..."
-sudo tee /etc/systemd/system/panacea-vault.service >/dev/null <<SERVICE
+sudo tee /etc/systemd/system/panacea-vault.service >/dev/null <<'SERVICE'
 [Unit]
 Description=Panacea Encrypted Data Vault
 DefaultDependencies=no
 After=local-fs.target
-Before=ssh.service sshd.service twingate-connector.service
+Before=ssh.service sshd.service twingate-connector.service twingate.service
 
 [Service]
 Type=oneshot
 RemainAfterExit=yes
-ExecStart=/sbin/cryptsetup open --type luks2 --key-file /root/.vault/vault.key /opt/vault.luks panacea_vault
+ExecStart=/bin/bash -c 'S=$(grep Serial /proc/cpuinfo | awk "{print \$3}"); H=$(hostname); echo -n "${S}:panacea-vault-${H}" | sha256sum | awk "{print \$1}" | /sbin/cryptsetup open --type luks2 --key-file=- /opt/vault.luks panacea_vault'
 ExecStartPost=/bin/mount /dev/mapper/panacea_vault /secure
 ExecStop=/bin/umount /secure
 ExecStopPost=/sbin/cryptsetup close panacea_vault
@@ -136,13 +136,17 @@ echo "║  ✅ ENCRYPTED DATA VAULT CREATED                           ║"
 echo "║                                                            ║"
 echo "║  Vault:    $VAULT_FILE ($VAULT_SIZE_MB MB, LUKS2 AES-256)  ║"
 echo "║  Mounted:  $MOUNT_POINT                                    ║"
-echo "║  Key:      Hardware-derived (CPU serial + hostname salt)   ║"
+echo "║  Key:      Derived at boot (CPU serial + hostname salt)    ║"
+echo "║            ⚠️  Key is NEVER stored on disk                  ║"
 echo "║  Service:  panacea-vault.service (auto-starts on boot)     ║"
 echo "║                                                            ║"
 echo "║  ✅ SSH host keys → /secure/ssh/                           ║"
 echo "║  ✅ authorized_keys → /secure/auth_keys/                   ║"
 echo "║  ✅ Logs → /secure/logs/                                   ║"
-echo "║  ⏳ Twingate config → will be moved after install (Step 5) ║"
+echo "║  ⏳ Twingate config → will be moved after install          ║"
+echo "║                                                            ║"
+echo "║  🔑 IMPORTANT: Record this Pi's CPU serial in your         ║"
+echo "║     inventory (ops/inventory.csv) for disaster recovery.   ║"
 echo "║                                                            ║"
 echo "║  The device will reboot unattended — no passphrase needed. ║"
 echo "╚══════════════════════════════════════════════════════════════╝"
