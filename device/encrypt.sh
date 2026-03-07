@@ -89,15 +89,16 @@ echo "Creating systemd auto-mount service..."
 sudo tee /etc/systemd/system/panacea-vault.service >/dev/null <<'SERVICE'
 [Unit]
 Description=Panacea Encrypted Data Vault
-DefaultDependencies=no
 After=local-fs.target
+Wants=local-fs.target
 Before=twingate-connector.service twingate.service
+ConditionPathExists=/opt/vault.luks
 
 [Service]
 Type=oneshot
 RemainAfterExit=yes
-ExecStart=/bin/bash -c 'S=$(grep Serial /proc/cpuinfo | awk "{print \$3}"); H=$(hostname); echo -n "${S}:panacea-vault-${H}" | sha256sum | awk "{print \$1}" | /sbin/cryptsetup open --type luks2 --key-file=- /opt/vault.luks panacea_vault'
-ExecStartPost=/bin/mount /dev/mapper/panacea_vault /secure
+ExecStartPre=/bin/mkdir -p /secure
+ExecStart=/bin/bash -c '  MAPPER="panacea_vault";   if [ -e /dev/mapper/$MAPPER ]; then     echo "Vault mapper already open — skipping cryptsetup";   else     S=$(grep Serial /proc/cpuinfo | awk "{print \$3}");     H=$(hostname);     echo -n "${S}:panacea-vault-${H}" | sha256sum | awk "{print \$1}" |       /sbin/cryptsetup open --type luks2 --key-file=- /opt/vault.luks $MAPPER;   fi;   if mountpoint -q /secure; then     echo "/secure already mounted — skipping mount";   else     /bin/mount /dev/mapper/$MAPPER /secure;   fi;   mountpoint -q /secure || { echo "FATAL: /secure failed to mount"; exit 1; }'
 ExecStop=/bin/umount /secure
 ExecStopPost=/sbin/cryptsetup close panacea_vault
 
