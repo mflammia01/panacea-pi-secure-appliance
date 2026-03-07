@@ -20,11 +20,16 @@ if ! mountpoint -q /secure; then
     echo "── Recent journal logs ──"
     sudo journalctl -u panacea-vault.service -b --no-pager 2>&1 | tail -n 30
     echo ""
+    echo ""
+    echo "── Service unit file ──"
+    sudo systemctl cat panacea-vault.service 2>&1 || true
+    echo ""
     echo "Troubleshooting:"
-    echo "  1. Check hostname hasn't changed: hostname"
-    echo "  2. Check CPU serial: grep Serial /proc/cpuinfo"
-    echo "  3. Check vault file exists: ls -la /opt/vault.luks"
-    echo "  4. Try manual unlock: sudo systemctl start panacea-vault.service"
+    echo "  1. If logs show 'unset environment variable H, S' → pull latest encrypt.sh and re-run it"
+    echo "  2. Check hostname hasn't changed: hostname"
+    echo "  3. Check CPU serial: grep Serial /proc/cpuinfo"
+    echo "  4. Check vault file exists: ls -la /opt/vault.luks"
+    echo "  5. Check helper script exists: ls -la /usr/local/sbin/panacea-vault-mount.sh"
     exit 1
   fi
   echo "✅ Vault service started — /secure is now mounted"
@@ -66,7 +71,9 @@ sudo systemctl restart ssh || sudo systemctl restart sshd
 # ── Restart Twingate AFTER firewall is fully configured ───────
 echo "Restarting Twingate connector against final firewall state..."
 sudo systemctl restart twingate-connector || true
-sudo systemctl restart twingate || true
+if systemctl list-unit-files twingate.service 2>/dev/null | grep -q twingate; then
+  sudo systemctl restart twingate || true
+fi
 sleep 5
 
 echo "════════════════════════════════════════════"
