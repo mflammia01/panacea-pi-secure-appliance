@@ -73,15 +73,33 @@ StartLimitIntervalSec=600
 StartLimitBurst=5
 RESTART
 sudo systemctl daemon-reload
-echo "✅ Twingate auto-restarts on failure (max 5× per 10min)"
+echo "✅ Twingate connector auto-restarts on failure (max 5× per 10min)"
+
+# If Twingate client is installed (Step 7), add auto-recovery for it too
+if systemctl list-unit-files twingate.service 2>/dev/null | grep -q twingate.service; then
+  echo "Configuring auto-recovery for Twingate client..."
+  sudo mkdir -p /etc/systemd/system/twingate.service.d
+  sudo tee /etc/systemd/system/twingate.service.d/restart.conf >/dev/null <<TRESTART
+[Service]
+Restart=on-failure
+RestartSec=10
+
+[Unit]
+StartLimitIntervalSec=600
+StartLimitBurst=5
+TRESTART
+  sudo systemctl daemon-reload
+  echo "✅ Twingate client auto-restarts on failure"
+fi
 
 # ── 5. Boot Diagnostics ─────────────────────────────────────
 echo "Installing boot diagnostics service..."
-sudo tee /etc/systemd/system/panacea-boot-report.service >/dev/null <<BOOT
+sudo tee /etc/systemd/system/panacea-boot-report.service >/dev/null <<'BOOT'
 [Unit]
 Description=Panacea Boot Diagnostics Report
 After=panacea-vault.service network-online.target
 Wants=network-online.target
+ConditionPathIsMountPoint=/secure
 
 [Service]
 Type=oneshot
@@ -91,7 +109,8 @@ ExecStart=/bin/bash -c '\
   echo "Last shutdown: $(last -x shutdown | head -1)" >> /secure/logs/boot_report.log; \
   echo "Vault: $(mountpoint -q /secure && echo OK || echo FAIL)" >> /secure/logs/boot_report.log; \
   echo "Twingate: $(systemctl is-active twingate-connector)" >> /secure/logs/boot_report.log; \
-  echo "SSH: $(systemctl is-active sshd)" >> /secure/logs/boot_report.log; \
+  echo "Twingate-Client: $(systemctl is-active twingate 2>/dev/null || echo not-installed)" >> /secure/logs/boot_report.log; \
+  SSH_SVC=$(systemctl list-unit-files ssh.service sshd.service 2>/dev/null | awk "/enabled|generated/ {print \$1; exit}"); SSH_SVC="${SSH_SVC%.service}"; [ -z "$SSH_SVC" ] && SSH_SVC="ssh"; echo "SSH: $(systemctl is-active $SSH_SVC)" >> /secure/logs/boot_report.log; \
   echo "Fail2ban: $(systemctl is-active fail2ban)" >> /secure/logs/boot_report.log; \
   echo "Temp: $(($(cat /sys/class/thermal/thermal_zone0/temp) / 1000))C" >> /secure/logs/boot_report.log; \
   echo "Disk: $(df / --output=pcent | tail -1)" >> /secure/logs/boot_report.log; \
