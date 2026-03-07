@@ -1,10 +1,13 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+DEVICE_NAME=$(hostname)
+
 # ── Migrate Twingate config into vault (if not already done) ──
 if [ -d /etc/twingate ] && [ ! -L /etc/twingate ]; then
   echo "Migrating Twingate config into encrypted vault..."
   sudo systemctl stop twingate-connector || true
+  sudo systemctl stop twingate || true
   mountpoint -q /secure || { echo "❌ /secure not mounted"; exit 1; }
   sudo mkdir -p /secure/twingate
   sudo cp -a /etc/twingate/. /secure/twingate/
@@ -15,7 +18,6 @@ if [ -d /etc/twingate ] && [ ! -L /etc/twingate ]; then
   else
     echo "⚠️  connector.conf not found in vault — skipping migration"
   fi
-  sudo systemctl start twingate-connector || true
 elif [ -L /etc/twingate ]; then
   echo "ℹ️  Twingate already symlinked to vault — skipping"
 fi
@@ -31,7 +33,27 @@ sudo ufw --force enable
 
 sudo systemctl restart ssh || sudo systemctl restart sshd
 
-echo "Sealed. All inbound blocked except SSH (port 22)."
+# ── Restart Twingate AFTER firewall is fully configured ───────
+echo "Restarting Twingate connector against final firewall state..."
+sudo systemctl restart twingate-connector || true
+sudo systemctl restart twingate || true
+sleep 5
+
+echo "════════════════════════════════════════════"
+echo "  DEVICE SEALED — $DEVICE_NAME"
+echo "════════════════════════════════════════════"
+echo "All inbound blocked except SSH (port 22)."
 if systemctl is-active --quiet twingate-connector 2>/dev/null; then
   echo "✅ Twingate connector is running"
+else
+  echo "⚠️  Twingate connector not running — check: sudo journalctl -u twingate-connector"
+fi
+if systemctl list-unit-files twingate.service 2>/dev/null | grep -q '^twingate\.service'; then
+  if systemctl is-active --quiet twingate 2>/dev/null; then
+    echo "✅ Twingate client is running"
+  else
+    echo "⚠️  Twingate client is installed but not running"
+  fi
+else
+  echo "ℹ️  Twingate client not installed (optional — Step 7)"
 fi
