@@ -94,7 +94,7 @@ echo "╔═══════════════════════�
 echo "║  ✅ HARDENING COMPLETE                                     ║"
 echo "║                                                            ║"
 echo "║  SSH is now key-only (password login disabled).            ║"
-echo "║  Next: Run device/encrypt.sh for LUKS root encryption.    ║"
+echo "║  Next: Run device/encrypt.sh for encrypted data vault.    ║"
 echo "╚══════════════════════════════════════════════════════════════╝"
 echo
 echo "Rebooting in 5 seconds... (Ctrl+C to cancel)"
