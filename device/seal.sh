@@ -35,8 +35,26 @@ if ! mountpoint -q /secure; then
   echo "✅ Vault service started — /secure is now mounted"
 fi
 
-# ── Migrate Twingate config into vault (if not already done) ──
-if [ -d /etc/twingate ] && [ ! -L /etc/twingate ]; then
+# ── Migrate Twingate config into vault (bind mount) ──────────
+# Twingate Client rejects symlinks — use bind mount instead.
+# /etc/twingate stays a real directory; data lives in /secure/twingate.
+
+# Fix legacy symlink from older seal.sh versions
+if [ -L /etc/twingate ]; then
+  echo "⚠️  Found legacy symlink — converting to bind mount..."
+  if systemctl list-unit-files twingate-connector.service 2>/dev/null | grep -q twingate-connector; then
+    sudo systemctl stop twingate-connector || true
+  fi
+  if systemctl list-unit-files twingate.service 2>/dev/null | grep -q twingate; then
+    sudo systemctl stop twingate || true
+  fi
+  sudo rm /etc/twingate
+  sudo mkdir -p /etc/twingate
+fi
+
+if mountpoint -q /etc/twingate 2>/dev/null; then
+  echo "ℹ️  /etc/twingate already bind-mounted from vault — skipping"
+elif [ -d /etc/twingate ]; then
   echo "Migrating Twingate config into encrypted vault..."
   if systemctl list-unit-files twingate-connector.service 2>/dev/null | grep -q twingate-connector; then
     sudo systemctl stop twingate-connector || true
@@ -47,14 +65,38 @@ if [ -d /etc/twingate ] && [ ! -L /etc/twingate ]; then
   sudo mkdir -p /secure/twingate
   sudo cp -a /etc/twingate/. /secure/twingate/
   if [ -f /secure/twingate/connector.conf ]; then
-    sudo rm -rf /etc/twingate
-    sudo ln -s /secure/twingate /etc/twingate
-    echo "✅ Twingate config migrated and symlinked"
+    # Normalize permissions (Twingate expects 755, not 700)
+    sudo chmod 755 /secure/twingate
+    sudo mount --bind /secure/twingate /etc/twingate
+    echo "✅ Twingate config migrated and bind-mounted from vault"
   else
     echo "⚠️  connector.conf not found in vault — skipping migration"
   fi
-elif [ -L /etc/twingate ]; then
-  echo "ℹ️  Twingate already symlinked to vault — skipping"
+fi
+
+# ── Install systemd unit for persistent bind mount on boot ────
+if [ ! -f /etc/systemd/system/panacea-twingate-vault.service ]; then
+  echo "Creating persistent bind mount service..."
+  sudo tee /etc/systemd/system/panacea-twingate-vault.service >/dev/null <<'UNIT'
+[Unit]
+Description=Bind-mount Twingate config from encrypted vault
+After=panacea-vault.service
+Requires=panacea-vault.service
+Before=twingate-connector.service twingate.service
+ConditionPathExists=/secure/twingate
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/bin/mount --bind /secure/twingate /etc/twingate
+ExecStop=/bin/umount /etc/twingate
+
+[Install]
+WantedBy=multi-user.target
+UNIT
+  sudo systemctl daemon-reload
+  sudo systemctl enable panacea-twingate-vault.service
+  echo "✅ panacea-twingate-vault.service enabled"
 fi
 
 # ── Firewall lockdown ─────────────────────────────────────────
