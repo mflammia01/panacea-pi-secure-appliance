@@ -29,33 +29,43 @@ sudo systemctl is-enabled panacea-vault.service 2>/dev/null && echo "✅ panacea
 sudo systemctl is-active panacea-vault.service 2>/dev/null && echo "✅ panacea-vault.service running" || echo "⚠️  panacea-vault.service not active"
 echo
 
-# ── SSH Symlinks ──────────────────────────────
-echo "── SSH Host Key Symlinks ──"
-for f in /etc/ssh/ssh_host_*; do
-  if [ -L "$f" ]; then
-    TARGET=$(readlink "$f")
-    if [[ "$TARGET" == /secure/* ]]; then
-      echo "✅ $f → $TARGET"
-    else
-      echo "⚠️  $f → $TARGET (not in /secure!)"
-    fi
-  elif [ -f "$f" ]; then
-    echo "❌ $f is a regular file (not symlinked to vault)"
+# ── SSH Host Keys ─────────────────────────────
+echo "── SSH Host Keys ──"
+if ls /etc/ssh/ssh_host_* 1>/dev/null 2>&1; then
+  echo "✅ SSH host keys present in /etc/ssh/"
+  if [ -L /etc/ssh/ssh_host_ed25519_key ]; then
+    echo "⚠️  Host keys are symlinked (legacy setup) — consider restoring local copies"
   fi
-done
+else
+  echo "❌ No SSH host keys found in /etc/ssh/"
+fi
+echo
+
+# ── authorized_keys ───────────────────────────
+echo "── authorized_keys ──"
+AUTH_KEYS="$HOME/.ssh/authorized_keys"
+if [ -f "$AUTH_KEYS" ] && [ ! -L "$AUTH_KEYS" ]; then
+  echo "✅ authorized_keys present and local"
+elif [ -L "$AUTH_KEYS" ]; then
+  echo "❌ authorized_keys is symlinked — should stay local"
+else
+  echo "❌ authorized_keys missing"
+fi
 echo
 
 # ── Twingate in Vault ─────────────────────────
 echo "── Twingate Config ──"
-if [ -L /etc/twingate ]; then
-  echo "✅ /etc/twingate → $(readlink /etc/twingate)"
+if mountpoint -q /etc/twingate 2>/dev/null; then
+  echo "✅ /etc/twingate is bind-mounted from vault"
   if sudo test -f /secure/twingate/connector.conf; then
     echo "✅ connector.conf present in vault"
   else
     echo "❌ connector.conf MISSING from vault — re-run setup"
   fi
+elif [ -L /etc/twingate ]; then
+  echo "❌ /etc/twingate is a symlink (breaks Twingate Client) — re-run seal.sh to fix"
 elif [ -d /etc/twingate ]; then
-  echo "⚠️  /etc/twingate exists but is NOT symlinked to vault"
+  echo "⚠️  /etc/twingate exists but is NOT vault-backed — run seal.sh"
 else
   echo "ℹ️  Twingate not installed yet"
 fi
