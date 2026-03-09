@@ -124,6 +124,40 @@ sudo systemctl daemon-reload
 sudo systemctl enable panacea-boot-report.service
 echo "✅ Boot report logs to /secure/logs/boot_report.log"
 
+# ── 6. Network Connectivity Timer ───────────────────────────
+echo "Installing network connectivity timer (every 15 min)..."
+SCRIPT_DIR=$(cd "$(dirname "$0")" && pwd)
+sudo cp "$SCRIPT_DIR/../ops/network-check.sh" /usr/local/bin/panacea-network-check.sh 2>/dev/null ||   sudo cp "$SCRIPT_DIR/network-check.sh" /usr/local/bin/panacea-network-check.sh 2>/dev/null ||   { echo "⚠️  network-check.sh not found — copy it manually to /usr/local/bin/panacea-network-check.sh"; }
+sudo chmod +x /usr/local/bin/panacea-network-check.sh
+
+sudo tee /etc/systemd/system/panacea-network-check.service >/dev/null <<NETSVC
+[Unit]
+Description=Panacea Network Connectivity Check
+After=panacea-vault.service network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/bin/panacea-network-check.sh
+NETSVC
+
+sudo tee /etc/systemd/system/panacea-network-check.timer >/dev/null <<NETTIMER
+[Unit]
+Description=Run Panacea network check every 15 minutes
+
+[Timer]
+OnBootSec=3min
+OnUnitActiveSec=15min
+Persistent=true
+
+[Install]
+WantedBy=timers.target
+NETTIMER
+
+sudo systemctl daemon-reload
+sudo systemctl enable --now panacea-network-check.timer
+echo "✅ Network connectivity checks run every 15 minutes"
+
 echo
 echo "════════════════════════════════════════════"
 echo "  ✅ MONITORING SETUP COMPLETE"
@@ -131,6 +165,7 @@ echo "════════════════════════�
 echo "  • Hardware watchdog: 15s (reboot on hang)"
 echo "  • Persistent logging: 200MB cap, 90-day retention"
 echo "  • Health checks: every 5 min → /secure/logs/healthcheck.log"
+echo "  • Network checks: every 15 min → /secure/logs/network-check.log"
 echo "  • Twingate auto-recovery: restart on failure"
 echo "  • Boot diagnostics: /secure/logs/boot_report.log"
 echo
