@@ -4,21 +4,27 @@ set -uo pipefail
 # ── Panacea Device Health Check ──────────────────────────────
 # Run manually or via systemd timer (every 5 min)
 # Logs to /secure/logs/healthcheck.log
+# Status to /secure/logs/healthcheck.status (machine-readable)
 # Exit: 0=healthy, 1=degraded (recovered), 2=critical
 
 LOGDIR="/secure/logs"
 LOGFILE="$LOGDIR/healthcheck.log"
+STATUSFILE="$LOGDIR/healthcheck.status"
 TIMESTAMP=$(date '+%Y-%m-%d %H:%M:%S')
 STATUS="HEALTHY"
 DETAILS=""
+KV=""
 
 log() { DETAILS="$DETAILS | $1"; }
+kv()  { KV="${KV}$1=$2\n"; }
 
 # ── Vault ──
 if mountpoint -q /secure 2>/dev/null; then
   log "vault=OK"
+  kv vault OK
 else
   log "vault=FAIL"
+  kv vault FAIL
   STATUS="CRITICAL"
 fi
 
@@ -29,8 +35,10 @@ SSH_SVC="${SSH_SVC%.service}"
 
 # ── Critical Services ──
 for SVC in twingate-connector "$SSH_SVC" fail2ban; do
+  SVC_KEY=$(echo "$SVC" | tr '-' '_')
   if systemctl is-active --quiet "$SVC" 2>/dev/null; then
     log "$SVC=OK"
+    kv "$SVC_KEY" OK
   else
     log "$SVC=DOWN"
     mountpoint -q /secure 2>/dev/null && echo "[$TIMESTAMP] Attempting restart: $SVC" >> "$LOGFILE" 2>/dev/null
@@ -38,9 +46,11 @@ for SVC in twingate-connector "$SSH_SVC" fail2ban; do
     sleep 3
     if systemctl is-active --quiet "$SVC" 2>/dev/null; then
       log "$SVC=RECOVERED"
+      kv "$SVC_KEY" RECOVERED
       [ "$STATUS" = "HEALTHY" ] && STATUS="DEGRADED"
     else
       log "$SVC=RESTART_FAILED"
+      kv "$SVC_KEY" RESTART_FAILED
       STATUS="CRITICAL"
     fi
   fi
@@ -50,6 +60,7 @@ done
 if systemctl list-unit-files twingate.service 2>/dev/null | grep -q twingate.service; then
   if systemctl is-active --quiet twingate 2>/dev/null; then
     log "twingate-client=OK"
+    kv twingate_client OK
   else
     log "twingate-client=DOWN"
     mountpoint -q /secure 2>/dev/null && echo "[$TIMESTAMP] Attempting restart: twingate" >> "$LOGFILE" 2>/dev/null
@@ -57,9 +68,33 @@ if systemctl list-unit-files twingate.service 2>/dev/null | grep -q twingate.ser
     sleep 3
     if systemctl is-active --quiet twingate 2>/dev/null; then
       log "twingate-client=RECOVERED"
+      kv twingate_client RECOVERED
       [ "$STATUS" = "HEALTHY" ] && STATUS="DEGRADED"
     else
       log "twingate-client=RESTART_FAILED"
+      kv twingate_client RESTART_FAILED
+      STATUS="CRITICAL"
+    fi
+  fi
+fi
+
+# ── Wazuh Agent (optional — Part E) ──
+if systemctl list-unit-files wazuh-agent.service 2>/dev/null | grep -q wazuh-agent.service; then
+  if systemctl is-active --quiet wazuh-agent 2>/dev/null; then
+    log "wazuh-agent=OK"
+    kv wazuh_agent OK
+  else
+    log "wazuh-agent=DOWN"
+    mountpoint -q /secure 2>/dev/null && echo "[$TIMESTAMP] Attempting restart: wazuh-agent" >> "$LOGFILE" 2>/dev/null
+    sudo systemctl restart wazuh-agent 2>/dev/null
+    sleep 3
+    if systemctl is-active --quiet wazuh-agent 2>/dev/null; then
+      log "wazuh-agent=RECOVERED"
+      kv wazuh_agent RECOVERED
+      [ "$STATUS" = "HEALTHY" ] && STATUS="DEGRADED"
+    else
+      log "wazuh-agent=RESTART_FAILED"
+      kv wazuh_agent RESTART_FAILED
       STATUS="CRITICAL"
     fi
   fi
@@ -73,6 +108,7 @@ if [ "$DISK_PCT" -gt 85 ]; then
 else
   log "disk=${DISK_PCT}%"
 fi
+kv disk_pct "$DISK_PCT"
 
 # ── CPU Temperature ──
 if [ -f /sys/class/thermal/thermal_zone0/temp ]; then
@@ -84,21 +120,31 @@ if [ -f /sys/class/thermal/thermal_zone0/temp ]; then
   else
     log "temp=${TEMP_C}C"
   fi
+  kv temp_c "$TEMP_C"
 fi
 
 # ── Memory ──
 MEM_PCT=$(free | awk '/Mem:/ {printf "%.0f", $3/$2*100}')
 log "mem=${MEM_PCT}%"
+kv mem_pct "$MEM_PCT"
 
 # ── Uptime ──
 UPTIME=$(uptime -p)
 log "up=$UPTIME"
+kv uptime "$UPTIME"
 
 # ── Write Log ──
 if mountpoint -q /secure 2>/dev/null; then
   echo "[$TIMESTAMP] $STATUS $DETAILS" >> "$LOGFILE"
 else
   logger -t panacea-healthcheck "$STATUS $DETAILS"
+fi
+
+# ── Write Machine-Readable Status File (atomic) ──
+if mountpoint -q /secure 2>/dev/null; then
+  STATUS_CONTENT="state=$STATUS\nlast_check=$TIMESTAMP\n$KV"
+  printf "%b" "$STATUS_CONTENT" > "$STATUSFILE.tmp"
+  mv "$STATUSFILE.tmp" "$STATUSFILE"
 fi
 
 # ── Exit Code ──
