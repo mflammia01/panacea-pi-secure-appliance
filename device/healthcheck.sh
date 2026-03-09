@@ -100,6 +100,28 @@ if systemctl list-unit-files wazuh-agent.service 2>/dev/null | grep -q wazuh-age
   fi
 fi
 
+# ── Zabbix Agent 2 (optional — Part E6) ──
+if systemctl list-unit-files zabbix-agent2.service 2>/dev/null | grep -q zabbix-agent2.service; then
+  if systemctl is-active --quiet zabbix-agent2 2>/dev/null; then
+    log "zabbix-agent2=OK"
+    kv zabbix_agent2 OK
+  else
+    log "zabbix-agent2=DOWN"
+    mountpoint -q /secure 2>/dev/null && echo "[$TIMESTAMP] Attempting restart: zabbix-agent2" >> "$LOGFILE" 2>/dev/null
+    sudo systemctl restart zabbix-agent2 2>/dev/null
+    sleep 3
+    if systemctl is-active --quiet zabbix-agent2 2>/dev/null; then
+      log "zabbix-agent2=RECOVERED"
+      kv zabbix_agent2 RECOVERED
+      [ "$STATUS" = "HEALTHY" ] && STATUS="DEGRADED"
+    else
+      log "zabbix-agent2=RESTART_FAILED"
+      kv zabbix_agent2 RESTART_FAILED
+      STATUS="CRITICAL"
+    fi
+  fi
+fi
+
 # ── Disk Usage ──
 DISK_PCT=$(df / | awk 'NR==2 {gsub(/%/,""); print $5}')
 if [ "$DISK_PCT" -gt 85 ]; then
