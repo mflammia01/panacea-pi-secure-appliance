@@ -92,6 +92,23 @@ TRESTART
   echo "✅ Twingate client auto-restarts on failure"
 fi
 
+# If Zabbix Agent 2 is installed (Step E6), add auto-recovery for it too
+if systemctl list-unit-files zabbix-agent2.service 2>/dev/null | grep -q zabbix-agent2.service; then
+  echo "Configuring auto-recovery for Zabbix Agent 2..."
+  sudo mkdir -p /etc/systemd/system/zabbix-agent2.service.d
+  sudo tee /etc/systemd/system/zabbix-agent2.service.d/restart.conf >/dev/null <<ZRESTART
+[Service]
+Restart=on-failure
+RestartSec=10
+
+[Unit]
+StartLimitIntervalSec=600
+StartLimitBurst=5
+ZRESTART
+  sudo systemctl daemon-reload
+  echo "✅ Zabbix Agent 2 auto-restarts on failure"
+fi
+
 # ── 5. Boot Diagnostics ─────────────────────────────────────
 echo "Installing boot diagnostics service..."
 sudo tee /etc/systemd/system/panacea-boot-report.service >/dev/null <<'BOOT'
