@@ -102,7 +102,7 @@ else
   SERIAL=$(grep Serial /proc/cpuinfo | awk '{print $3}')
   HOST=$(hostname)
   KEY=$(echo -n "${SERIAL}:panacea-vault-${HOST}" | sha256sum | awk '{print $1}')
-  echo -n "$KEY" | /sbin/cryptsetup open --type luks2 --key-file=- /opt/vault.luks "$MAPPER"
+  echo "$KEY" | /sbin/cryptsetup open --type luks2 --key-file=- /opt/vault.luks "$MAPPER"
   echo "Vault mapper opened"
 fi
 
