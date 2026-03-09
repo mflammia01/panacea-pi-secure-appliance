@@ -79,6 +79,15 @@ blacklist usb_storage
 blacklist uas
 USB
 
+# Disable IPv6 (prevents connectivity issues with IPv6-first resolution)
+echo "Disabling IPv6..."
+sudo tee /etc/sysctl.d/99-panacea-disable-ipv6.conf >/dev/null <<IPV6
+net.ipv6.conf.all.disable_ipv6 = 1
+net.ipv6.conf.default.disable_ipv6 = 1
+net.ipv6.conf.lo.disable_ipv6 = 1
+IPV6
+sudo sysctl --system >/dev/null 2>&1
+
 # Firewall baseline
 echo "Setting up firewall..."
 sudo ufw --force reset
