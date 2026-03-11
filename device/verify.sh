@@ -110,6 +110,14 @@ else
   echo "ℹ️  USBGuard not installed (optional — see Step 10)"
 fi
 echo
+echo "── NTP / Clock Sync ──"
+if systemctl is-active --quiet chronyd 2>/dev/null; then
+  echo "✅ chronyd is running"
+  chronyc tracking 2>/dev/null | grep -E "Leap status|Last offset" || true
+else
+  echo "⚠️  chronyd is NOT running — Twingate connector may flap (clock drift >5s)"
+fi
+echo
 echo "── Serial Console ──"
 if [ -f device/serial-console.sh ] || [ -f /usr/local/bin/serial-console.sh ]; then
   echo "✅ serial-console.sh present"
