@@ -6,6 +6,8 @@ set -euo pipefail
 # Auto-unlocks on boot using a hardware-derived key (CPU serial + salt)
 # The key is NEVER stored on disk — it is derived at every boot
 # Run AFTER harden.sh, BEFORE Twingate install
+#
+# IDEMPOTENT: safe to re-run — skips steps that are already done
 
 VAULT_FILE="/opt/vault.luks"
 VAULT_MAPPER="panacea_vault"
@@ -49,28 +51,43 @@ fi
 SALT="panacea-vault-$(hostname)"
 echo "✅ CPU serial read successfully"
 
-# ── Create LUKS container ─────────────────────────────────────
-echo "Creating ${VAULT_SIZE_MB}MB container file..."
-sudo dd if=/dev/zero of="$VAULT_FILE" bs=1M count=$VAULT_SIZE_MB status=progress
-sudo chmod 600 "$VAULT_FILE"
+# ── Create LUKS container (skip if vault file already exists) ─
+if [ -f "$VAULT_FILE" ]; then
+  echo "ℹ️  Vault file $VAULT_FILE already exists — skipping creation"
+  # Try to open the existing vault
+  if [ ! -e "/dev/mapper/$VAULT_MAPPER" ]; then
+    echo "Opening existing vault..."
+    echo -n "${CPU_SERIAL}:${SALT}" | sha256sum | awk '{print $1}' | \
+      sudo cryptsetup open --type luks2 --key-file=- \
+      "$VAULT_FILE" "$VAULT_MAPPER"
+  fi
+else
+  echo "Creating ${VAULT_SIZE_MB}MB container file..."
+  sudo dd if=/dev/zero of="$VAULT_FILE" bs=1M count=$VAULT_SIZE_MB status=progress
+  sudo chmod 600 "$VAULT_FILE"
 
-echo "Formatting with LUKS2 AES-256 (key derived from CPU serial, not stored)..."
-echo -n "${CPU_SERIAL}:${SALT}" | sha256sum | awk '{print $1}' | \
-  sudo cryptsetup luksFormat --type luks2 --cipher aes-xts-plain64 \
-  --key-size 512 --hash sha256 --batch-mode \
-  "$VAULT_FILE" /dev/stdin
+  echo "Formatting with LUKS2 AES-256 (key derived from CPU serial, not stored)..."
+  echo -n "${CPU_SERIAL}:${SALT}" | sha256sum | awk '{print $1}' | \
+    sudo cryptsetup luksFormat --type luks2 --cipher aes-xts-plain64 \
+    --key-size 512 --hash sha256 --batch-mode \
+    "$VAULT_FILE" /dev/stdin
 
-echo "Opening vault..."
-echo -n "${CPU_SERIAL}:${SALT}" | sha256sum | awk '{print $1}' | \
-  sudo cryptsetup open --type luks2 --key-file=- \
-  "$VAULT_FILE" "$VAULT_MAPPER"
+  echo "Opening vault..."
+  echo -n "${CPU_SERIAL}:${SALT}" | sha256sum | awk '{print $1}' | \
+    sudo cryptsetup open --type luks2 --key-file=- \
+    "$VAULT_FILE" "$VAULT_MAPPER"
 
-echo "Creating ext4 filesystem..."
-sudo mkfs.ext4 -L panacea-vault "/dev/mapper/$VAULT_MAPPER"
+  echo "Creating ext4 filesystem..."
+  sudo mkfs.ext4 -L panacea-vault "/dev/mapper/$VAULT_MAPPER"
+fi
 
-# ── Mount ──────────────────────────────────────────────────────
+# ── Mount (skip if already mounted) ────────────────────────────
 sudo mkdir -p "$MOUNT_POINT"
-sudo mount "/dev/mapper/$VAULT_MAPPER" "$MOUNT_POINT"
+if mountpoint -q "$MOUNT_POINT" 2>/dev/null; then
+  echo "ℹ️  $MOUNT_POINT already mounted — skipping mount"
+else
+  sudo mount "/dev/mapper/$VAULT_MAPPER" "$MOUNT_POINT"
+fi
 
 # Create vault directory structure
 sudo mkdir -p "$MOUNT_POINT"/{twingate,logs,secrets}
@@ -78,15 +95,14 @@ sudo chmod 700 "$MOUNT_POINT"/secrets
 echo "✅ Vault mounted at $MOUNT_POINT"
 
 # ── Create log directory ──────────────────────────────────────
-sudo mkdir -p /var/log/panacea
+sudo mkdir -p /var/log/panacea 2>/dev/null || true
 if [ ! -L /var/log/panacea ]; then
   sudo rm -rf /var/log/panacea
   sudo ln -s "$MOUNT_POINT/logs" /var/log/panacea
   echo "✅ /var/log/panacea → vault"
 fi
 
-# ── Create vault mount helper script ──────────────────────────
-# Separate script avoids systemd ExecStart escaping pitfalls
+# ── Create vault mount helper script (always written to ensure latest version) ──
 echo "Creating vault mount helper script..."
 sudo tee /usr/local/sbin/panacea-vault-mount.sh >/dev/null <<'HELPER'
 #!/usr/bin/env bash
@@ -122,7 +138,7 @@ echo "✅ Vault is ready at $MOUNT"
 HELPER
 sudo chmod 755 /usr/local/sbin/panacea-vault-mount.sh
 
-# ── Create systemd service for auto-mount ─────────────────────
+# ── Create systemd service (always written to ensure latest version) ──
 echo "Creating systemd auto-mount service..."
 sudo tee /etc/systemd/system/panacea-vault.service >/dev/null <<'SERVICE'
 [Unit]
