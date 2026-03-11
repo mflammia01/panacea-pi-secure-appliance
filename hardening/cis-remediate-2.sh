@@ -103,10 +103,16 @@ sudo systemctl stop bluetooth.service 2>/dev/null || true
 sudo systemctl mask bluetooth.service 2>/dev/null || true
 echo "  ✓ bluetooth.service stopped and masked"
 
-# ── 12. Purge chrony (CIS 33097) ────────────────────────────────
-echo "[12/14] Removing chrony (systemd-timesyncd already active)..."
-sudo apt-get purge -y -qq chrony 2>/dev/null || true
-echo "  ✓ chrony purged — systemd-timesyncd remains active for NTP"
+# ── 12. Verify chrony NTP (CIS 33097) ────────────────────────────
+echo "[12/14] Verifying chrony is active (required for Twingate clock sync)..."
+if systemctl is-active --quiet chronyd 2>/dev/null; then
+  echo "  ✓ chronyd is running — NTP via chrony (single NTP source, CIS-compliant)"
+else
+  echo "  ⚠ chronyd not running — starting chrony..."
+  sudo systemctl enable chrony 2>/dev/null || true
+  sudo systemctl start chrony 2>/dev/null || true
+  echo "  ✓ chrony enabled and started"
+fi
 
 # ── 13. Banner file permissions (CIS 33051–33053) ───────────────
 echo "[13/14] Setting banner file permissions..."
@@ -128,7 +134,7 @@ echo "nullok check:    $(grep -c 'nullok' /etc/pam.d/common-* 2>/dev/null || ech
 echo "opasswd perms:   $(stat -c '%a %U:%G' /etc/security/opasswd 2>/dev/null || echo 'missing')"
 echo "avahi masked:    $(systemctl is-enabled avahi-daemon 2>/dev/null || echo 'masked/not-found')"
 echo "bluetooth:       $(systemctl is-enabled bluetooth 2>/dev/null || echo 'masked/not-found')"
-echo "chrony:          $(dpkg -l chrony 2>/dev/null | grep -c '^ii' || echo '0') installed"
+echo "chrony:          $(systemctl is-active chronyd 2>/dev/null || echo 'not running')"
 echo "journal-upload:  $(systemctl is-enabled systemd-journal-upload 2>/dev/null || echo 'not found')"
 echo "tmp.mount:       $(systemctl is-enabled tmp.mount 2>/dev/null || echo 'not found')"
 echo ""
