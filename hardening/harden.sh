@@ -4,6 +4,10 @@ set -euo pipefail
 # Admin username — pass via env var or enter when prompted
 ADMIN_USER="${ADMIN_USER:-}"
 if [ -z "$ADMIN_USER" ]; then
+  if [ "${PANACEA_AUTO_PROVISION:-}" = "1" ]; then
+    echo "❌ ADMIN_USER not set and running in auto-provision mode" >&2
+    exit 1
+  fi
   read -rp "Enter admin username (must match Raspberry Pi Imager): " ADMIN_USER
 fi
 if [ -z "$ADMIN_USER" ]; then
@@ -33,7 +37,14 @@ echo "✅ SSH public key found for $ADMIN_USER"
 
 echo "Installing security packages..."
 sudo apt update
-sudo apt install -y ufw fail2ban unattended-upgrades apt-listchanges usbguard ca-certificates curl cryptsetup
+sudo apt install -y ufw fail2ban unattended-upgrades apt-listchanges usbguard ca-certificates curl cryptsetup chrony
+
+# NTP — switch to chrony for sub-ms accuracy (prevents Twingate connector flapping)
+echo "Configuring chrony for precise NTP sync..."
+sudo systemctl stop systemd-timesyncd 2>/dev/null || true
+sudo systemctl disable systemd-timesyncd 2>/dev/null || true
+sudo systemctl enable chrony
+sudo systemctl start chrony
 
 # SSH hardening — key-only, no passwords
 echo "Hardening SSH..."
@@ -106,6 +117,8 @@ echo "║  SSH is now key-only (password login disabled).            ║"
 echo "║  Next: Run device/encrypt.sh for encrypted data vault.    ║"
 echo "╚══════════════════════════════════════════════════════════════╝"
 echo
-echo "Rebooting in 5 seconds... (Ctrl+C to cancel)"
-sleep 5
+if [ "${PANACEA_AUTO_PROVISION:-}" != "1" ]; then
+  echo "Rebooting in 5 seconds... (Ctrl+C to cancel)"
+  sleep 5
+fi
 sudo reboot
