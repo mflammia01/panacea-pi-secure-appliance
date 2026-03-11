@@ -27,11 +27,13 @@ echo "║  SSH keys are left untouched — SSH is not affected.       ║"
 echo "╚══════════════════════════════════════════════════════════════╝"
 echo
 
-# Safety check
-read -rp "Type YES to create the encrypted vault: " CONFIRM
-if [ "$CONFIRM" != "YES" ]; then
-  echo "Aborted."
-  exit 0
+# Safety check (skipped during auto-provisioning)
+if [ "${PANACEA_AUTO_PROVISION:-}" != "1" ]; then
+  read -rp "Type YES to create the encrypted vault: " CONFIRM
+  if [ "$CONFIRM" != "YES" ]; then
+    echo "Aborted."
+    exit 0
+  fi
 fi
 
 # Install cryptsetup
@@ -166,6 +168,8 @@ echo "║                                                            ║"
 echo "║  The device will reboot unattended — no passphrase needed. ║"
 echo "╚══════════════════════════════════════════════════════════════╝"
 echo
-echo "Rebooting in 5 seconds to test vault auto-mount... (Ctrl+C to cancel)"
-sleep 5
+if [ "${PANACEA_AUTO_PROVISION:-}" != "1" ]; then
+  echo "Rebooting in 5 seconds to test vault auto-mount... (Ctrl+C to cancel)"
+  sleep 5
+fi
 sudo reboot
