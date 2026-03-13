@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 set -euo pipefail
+trap 'echo "❌ ERROR at line $LINENO: $BASH_COMMAND" >&2' ERR
 
 echo "════════════════════════════════════════════"
 echo "  PANACEA MONITORING SETUP"
@@ -29,6 +30,11 @@ echo "✅ Logs persist across reboots (200MB cap)"
 # ── 3. Health Check Timer ────────────────────────────────────
 echo "Installing health check timer (every 5 min)..."
 SCRIPT_DIR=$(cd "$(dirname "$0")" && pwd)
+if [ ! -f "$SCRIPT_DIR/healthcheck.sh" ]; then
+  echo "❌ healthcheck.sh not found at $SCRIPT_DIR/healthcheck.sh"
+  echo "   Make sure you're running from the repo root: cd ~/panacea-pi-secure-appliance"
+  exit 1
+fi
 sudo cp "$SCRIPT_DIR/healthcheck.sh" /usr/local/bin/panacea-healthcheck.sh
 sudo chmod +x /usr/local/bin/panacea-healthcheck.sh
 
@@ -145,7 +151,7 @@ echo "✅ Boot report logs to /secure/logs/boot_report.log"
 echo "Installing network connectivity timer (every 15 min)..."
 SCRIPT_DIR=$(cd "$(dirname "$0")" && pwd)
 sudo cp "$SCRIPT_DIR/../ops/network-check.sh" /usr/local/bin/panacea-network-check.sh 2>/dev/null ||   sudo cp "$SCRIPT_DIR/network-check.sh" /usr/local/bin/panacea-network-check.sh 2>/dev/null ||   { echo "⚠️  network-check.sh not found — copy it manually to /usr/local/bin/panacea-network-check.sh"; }
-sudo chmod +x /usr/local/bin/panacea-network-check.sh
+[ -f /usr/local/bin/panacea-network-check.sh ] && sudo chmod +x /usr/local/bin/panacea-network-check.sh
 
 sudo tee /etc/systemd/system/panacea-network-check.service >/dev/null <<NETSVC
 [Unit]
