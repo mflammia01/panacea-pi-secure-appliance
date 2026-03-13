@@ -108,6 +108,14 @@ sudo ufw allow in on lo
 sudo ufw allow out on lo
 sudo ufw --force enable
 
+# ── Dual-role routing: allow forwarding between LAN and Twingate overlay ──
+if ip link show sdwan0 &>/dev/null; then
+  echo "Detected sdwan0 (Twingate Client) — adding FORWARD rules for dual-role routing..."
+  sudo ufw route allow in on eth0 out on sdwan0
+  sudo ufw route allow in on sdwan0 out on eth0
+  echo "✅ UFW FORWARD rules added (eth0 ↔ sdwan0)"
+fi
+
 sudo systemctl restart ssh || sudo systemctl restart sshd
 
 # ── Restart Twingate AFTER firewall is fully configured ───────
