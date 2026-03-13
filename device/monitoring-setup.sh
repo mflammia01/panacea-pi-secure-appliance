@@ -8,7 +8,7 @@ echo "════════════════════════�
 
 # ── 1. Hardware Watchdog ─────────────────────────────────────
 echo "Enabling hardware watchdog (15s timeout)..."
-sudo sed -i 's/^#\?RuntimeWatchdogSec=.*/RuntimeWatchdogSec=15/' /etc/systemd/system.conf
+sudo sed -i -E 's/^#?RuntimeWatchdogSec=.*/RuntimeWatchdogSec=15/' /etc/systemd/system.conf
 # If the line doesn't exist, append it
 grep -q '^RuntimeWatchdogSec=' /etc/systemd/system.conf || \
   echo 'RuntimeWatchdogSec=15' | sudo tee -a /etc/systemd/system.conf >/dev/null
