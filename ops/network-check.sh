@@ -72,6 +72,21 @@ else
   check "GitHub" "UNREACHABLE"
 fi
 
+# ── Optional Twingate Resource Probe ──
+# Set TG_TEST_HOST and TG_TEST_PORT (comma-separated) to probe resources
+# through the tunnel. Unset = skipped (backward-compatible).
+if [ -n "${TG_TEST_HOST:-}" ] && [ -n "${TG_TEST_PORT:-}" ]; then
+  IFS=',' read -ra PORTS <<< "$TG_TEST_PORT"
+  for PORT in "${PORTS[@]}"; do
+    PORT=$(echo "$PORT" | tr -d ' ')
+    if timeout 5 bash -c "</dev/tcp/$TG_TEST_HOST/$PORT" 2>/dev/null; then
+      check "Twingate-Resource($TG_TEST_HOST:$PORT)" "OK"
+    else
+      check "Twingate-Resource($TG_TEST_HOST:$PORT)" "UNREACHABLE"
+    fi
+  done
+fi
+
 # ── Summary ──
 if [ -z "$FAILURES" ]; then
   SUMMARY="ALL_OK"
