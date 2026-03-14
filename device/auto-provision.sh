@@ -1,4 +1,3 @@
-cat > device/auto-provision.sh << 'EOF'
 #!/usr/bin/env bash
 set -euo pipefail
 
@@ -390,5 +389,3 @@ if [ "$FINAL" = "done" ]; then
   # Disable the service — no longer needed
   systemctl disable panacea-provision.service 2>/dev/null || true
 fi
-EOF
-chmod +x device/auto-provision.sh
